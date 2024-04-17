@@ -11,6 +11,7 @@ public class MTWebCrawler implements Runnable{
   private static final int MAX_DEPTH = 3;
   private int ID;
   private Thread thread;
+  private boolean paused;
   private String first_link;
   private ArrayList<String> visitedLinks = new ArrayList<String>();
 
@@ -22,11 +23,26 @@ public class MTWebCrawler implements Runnable{
     System.out.println("Web Crawler "+ ID + " created.");
     this.first_link = first_link;
     this.ID = ID;
-
+    this.paused=false; //Default value of paused is false
     thread = new Thread(this);
     thread.start();
   }//MTWebCrawler 
-  
+  //A set pause method to make the private variable paused, publicly accessible
+  public synchronized void setPause(boolean pause){
+    this.paused=pause;
+    notifyAll(); //Notify potentially waiting threads
+  }
+  //The synchronized keyword ensures that all threads exhibit the same behavior.
+  protected synchronized void checkPaused(){
+    while(paused){
+      try{
+        wait(); //Busy wait until pause is set to false
+      }
+      catch(InterruptedException e){
+        Thread.currentThread().interrupt();
+      }
+    }
+  }
   // Runs the web crawler
   @Override
   public void run(){
@@ -43,10 +59,14 @@ public class MTWebCrawler implements Runnable{
 
       if (doc != null){
         for (Element link : doc.select("a[href]")){
+          checkPaused();
           String next_link = link.absUrl("href");
-          if(visitedLinks.contains(next_link) == false){
-            crawl(level++, next_link);
-          }
+          if (!next_link.startsWith("javascript:")) {  // Check if it's not a JavaScript link that leads to nothing
+                    if (!visitedLinks.contains(next_link)) {
+                        visitedLinks.add(next_link);
+                        crawl(level + 1, next_link);
+                    }
+                }
         }
       }
     }
